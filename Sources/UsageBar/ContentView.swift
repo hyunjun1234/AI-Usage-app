@@ -188,9 +188,13 @@ struct ToolCard: View {
                     Text(loginTitle)
                         .font(.caption.weight(.medium))
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(accent)
+                        .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
                 }
-                .controlSize(.small)
+                .buttonStyle(.plain)
                 .disabled(loginDisabled)
+                .opacity(loginDisabled ? 0.5 : 1)
                 .help(tool == .codex
                       ? "Codex 앱·CLI와 로그인 상태를 공유합니다."
                       : "claude.ai 계정으로 로그인합니다.")
@@ -198,7 +202,8 @@ struct ToolCard: View {
             if let cancelLoginAction {
                 Button("로그인 취소", action: cancelLoginAction)
                     .font(.caption)
-                    .controlSize(.small)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(11)
