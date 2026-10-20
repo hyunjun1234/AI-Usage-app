@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import ServiceManagement
+import AppKit
 
 /// Which tools the menu bar and popover show.
 enum ToolFilter: String, CaseIterable {
@@ -39,6 +40,7 @@ struct Snapshot {
     var codexOK = true
     var codexFetched: Date?
     var codexPlan: String?
+    var codexError: String?
     var claudeLoggedOut = false
     var claudePlan: String? = nil
 
@@ -57,6 +59,7 @@ struct Snapshot {
 final class UsageStore: ObservableObject {
     @Published private(set) var snapshot = Snapshot()
     @Published private(set) var isRefreshing = false
+    @Published private(set) var codexLoginInProgress = false
     @Published var menuWindow: WindowKind {
         didSet { UserDefaults.standard.set(menuWindow.rawValue, forKey: "menuWindow") }
     }
@@ -69,14 +72,15 @@ final class UsageStore: ObservableObject {
 
     private var codexLimits: CodexLimitsResult?
     private var codexFetchOK = true
-    private var lastUpdated: Date?
     private var codexFetchedAt: Date?
     private var codexInFlight = false
-
-    private let codexQueue = DispatchQueue(label: "aiusage.codex")
+    private var codexError: String?
+    private var waitingForManualCodexRefresh = false
+    private let codexServer = CodexAppServer()
 
     private let claudeWeb = ClaudeWebSession()
     private var claudeReal: [LimitWindow] = []
+    private var claudeFetchedAt: Date?
     private var claudePlan: String?
     private var claudeLoggedOut = false
     private var didAutoPromptLogin = false
@@ -89,15 +93,70 @@ final class UsageStore: ObservableObject {
         refreshInterval = RefreshInterval(
             rawValue: UserDefaults.standard.integer(forKey: "refreshInterval")) ?? .s10
 
+        codexServer.onLimits = { [weak self] result in
+            guard let self else { return }
+            self.codexInFlight = false
+            switch result {
+            case .success(let limits):
+                self.codexLimits = limits
+                self.codexFetchedAt = Date()
+                self.codexFetchOK = true
+                self.codexError = nil
+            case .failure(let error):
+                self.codexFetchOK = false
+                self.codexError = error.message
+                if error.requiresLogin {
+                    self.codexLimits = nil
+                    self.codexFetchedAt = nil
+                }
+            }
+            if self.waitingForManualCodexRefresh {
+                self.waitingForManualCodexRefresh = false
+                self.isRefreshing = false
+            }
+            self.recompute()
+        }
+        codexServer.onAccountChanged = { [weak self] in
+            guard let self else { return }
+            self.codexLimits = nil
+            self.codexFetchedAt = nil
+            self.codexError = nil
+            self.recompute()
+        }
+        codexServer.onLoginStateChanged = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .idle:
+                self.codexLoginInProgress = false
+            case .waitingForBrowser:
+                self.codexLoginInProgress = true
+            case .failed(let message):
+                self.codexLoginInProgress = false
+                self.codexFetchOK = false
+                self.codexError = message
+            }
+            self.recompute()
+        }
+        codexServer.onOpenLoginURL = { [weak self] url in
+            if !NSWorkspace.shared.open(url) {
+                self?.cancelCodexLogin()
+                self?.codexError = "로그인 브라우저를 열지 못했습니다. 다시 시도하세요."
+                self?.codexFetchOK = false
+                self?.recompute()
+            }
+        }
+
         claudeWeb.onResult = { [weak self] result in
             guard let self = self else { return }
             switch result {
             case .ok(let windows, let plan):
                 self.claudeReal = windows
+                self.claudeFetchedAt = Date()
                 self.claudePlan = plan       // null wipes a stale label
                 self.claudeLoggedOut = false
             case .loggedOut:
                 self.claudeReal = []
+                self.claudeFetchedAt = nil
                 self.claudePlan = nil
                 self.claudeLoggedOut = true
                 if !self.didAutoPromptLogin {
@@ -119,12 +178,14 @@ final class UsageStore: ObservableObject {
         if toolFilter.showsClaude { claudeWeb.refreshUsage() }
     }
 
-    /// Manual refresh from the popover button — shows a brief spinner.
+    /// Keep the spinner until the requested Codex response arrives.
     func manualRefresh() {
         isRefreshing = true
+        waitingForManualCodexRefresh = toolFilter.showsCodex && !codexLoginInProgress
         refresh(force: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.isRefreshing = false
+            guard let self, !self.waitingForManualCodexRefresh else { return }
+            self.isRefreshing = false
         }
     }
 
@@ -133,30 +194,33 @@ final class UsageStore: ObservableObject {
         claudeWeb.showLoginWindow()
     }
 
+    /// Codex owns the OAuth browser callback and credential storage.
+    func showCodexLogin() {
+        guard !codexLoginInProgress else { return }
+        codexLoginInProgress = true
+        codexError = nil
+        recompute()
+        codexServer.startLogin()
+    }
+
+    func cancelCodexLogin() {
+        codexServer.cancelLogin()
+    }
+
+    func stop() {
+        codexServer.stop()
+    }
+
     func refreshCodexLimits() {
-        if codexInFlight { return }
+        if codexInFlight || codexLoginInProgress { return }
         codexInFlight = true
-        codexQueue.async { [weak self] in
-            let result = CodexAppServer.fetchRateLimits()
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.codexInFlight = false
-                self.codexFetchedAt = Date()
-                if let result = result {
-                    self.codexLimits = result
-                    self.codexFetchOK = true
-                } else {
-                    self.codexFetchOK = false
-                }
-                self.recompute()
-            }
-        }
+        codexServer.refresh()
     }
 
     // MARK: - Derived snapshot
 
     private func recompute() {
-        lastUpdated = Date()
+        let lastUpdated = [claudeFetchedAt, codexFetchedAt].compactMap { $0 }.max()
         let cWindows = claudeReal
         let xWindows = [codexLimits?.fiveHour, codexLimits?.weekly].compactMap { $0 }
         let maxPct = (cWindows + xWindows).map { $0.usedPercent }.max()
@@ -168,6 +232,7 @@ final class UsageStore: ObservableObject {
             codexOK: codexFetchOK,
             codexFetched: codexFetchedAt,
             codexPlan: codexLimits?.planType,
+            codexError: codexError,
             claudeLoggedOut: claudeLoggedOut,
             claudePlan: claudePlan)
     }

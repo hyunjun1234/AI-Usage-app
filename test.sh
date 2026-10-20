@@ -16,3 +16,11 @@ swiftc \
     Tests/ClaudeUsageParserTests.swift \
     -o "$TEST_DIR/ClaudeUsageParserTests"
 "$TEST_DIR/ClaudeUsageParserTests"
+
+swiftc \
+    Sources/UsageBar/Models.swift \
+    Sources/UsageBar/Format.swift \
+    Sources/UsageBar/CodexAppServer.swift \
+    Tests/CodexAppServerTests.swift \
+    -o "$TEST_DIR/CodexAppServerTests"
+"$TEST_DIR/CodexAppServerTests"

@@ -46,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reconcileTimer()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        store.stop()
+    }
+
     /// Recreates the auto-refresh timer when the chosen interval changes.
     private func reconcileTimer() {
         let interval = TimeInterval(store.refreshInterval.rawValue)
@@ -118,6 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .target = self
         menu.addItem(withTitle: "Claude.ai 로그인", action: #selector(loginClaude), keyEquivalent: "")
             .target = self
+        menu.addItem(withTitle: store.codexLoginInProgress ? "Codex 로그인 취소" : "Codex 로그인",
+                     action: store.codexLoginInProgress ? #selector(cancelCodexLogin) : #selector(loginCodex),
+                     keyEquivalent: "")
+            .target = self
 
         menu.addItem(.separator())
 
@@ -181,6 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openPopover() { if !popover.isShown { togglePopover() } }
     @objc private func refreshNow() { store.refresh(force: true) }
     @objc private func loginClaude() { store.showClaudeLogin() }
+    @objc private func loginCodex() { store.showCodexLogin() }
+    @objc private func cancelCodexLogin() { store.cancelCodexLogin() }
     @objc private func toggleLaunchAtLogin() { store.launchAtLogin.toggle() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
@@ -211,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Claude · Codex 사용량을 메뉴 막대에 표시합니다.
         두 도구 모두 계정의 실제 한도를 실시간으로 보여줍니다.
 
-        버전 2.7
+        버전 2.8
         """
         alert.addButton(withTitle: "확인")
         alert.runModal()

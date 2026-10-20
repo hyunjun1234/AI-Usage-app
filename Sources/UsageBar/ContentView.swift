@@ -110,20 +110,29 @@ struct ContentView: View {
 
     private var codexCard: some View {
         let snap = store.snapshot
+        let hasData = !snap.codexWindows.isEmpty
         let note: String?
-        if !snap.codexWindows.isEmpty {
+        if store.codexLoginInProgress {
+            note = "브라우저에서 ChatGPT 로그인을 완료하면 사용량을 바로 불러옵니다."
+        } else if let error = snap.codexError {
+            note = hasData ? "\(error)\n마지막으로 확인한 사용량을 표시합니다." : error
+        } else if hasData {
             note = nil
-        } else if snap.codexFetched == nil {
-            note = "불러오는 중…"
         } else {
-            note = "Codex 한도를 불러오지 못했습니다.\nCodex 앱이 설치·로그인되어 있는지 확인하세요."
+            note = "Codex 사용량을 불러오는 중…"
         }
         return ToolCard(tool: .codex, accent: Theme.codex,
-                        badge: snap.codexWindows.isEmpty ? "" : "실시간",
-                        badgeReal: !snap.codexWindows.isEmpty,
+                        badge: hasData ? (snap.codexOK ? "실시간" : "갱신 지연") : "",
+                        badgeReal: hasData && snap.codexOK,
                         subtitle: snap.codexPlan.map { $0.capitalized } ?? "",
                         windows: snap.codexWindows,
-                        note: note)
+                        note: note,
+                        loginAction: { store.showCodexLogin() },
+                        loginTitle: store.codexLoginInProgress
+                            ? "브라우저에서 로그인 중…" : "ChatGPT 계정으로 로그인",
+                        loginDisabled: store.codexLoginInProgress,
+                        cancelLoginAction: store.codexLoginInProgress
+                            ? { store.cancelCodexLogin() } : nil)
     }
 }
 
@@ -137,6 +146,9 @@ struct ToolCard: View {
     let windows: [LimitWindow]
     let note: String?
     var loginAction: (() -> Void)? = nil
+    var loginTitle = "Claude.ai 로그인 → 실시간 사용량"
+    var loginDisabled = false
+    var cancelLoginAction: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -173,11 +185,20 @@ struct ToolCard: View {
             }
             if let loginAction = loginAction {
                 Button(action: loginAction) {
-                    Text("Claude.ai 로그인 → 실시간 사용량")
+                    Text(loginTitle)
                         .font(.caption.weight(.medium))
                         .frame(maxWidth: .infinity)
                 }
                 .controlSize(.small)
+                .disabled(loginDisabled)
+                .help(tool == .codex
+                      ? "Codex 앱·CLI와 로그인 상태를 공유합니다."
+                      : "claude.ai 계정으로 로그인합니다.")
+            }
+            if let cancelLoginAction {
+                Button("로그인 취소", action: cancelLoginAction)
+                    .font(.caption)
+                    .controlSize(.small)
             }
         }
         .padding(11)
