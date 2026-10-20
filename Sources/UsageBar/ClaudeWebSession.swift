@@ -2,7 +2,7 @@ import WebKit
 import AppKit
 
 enum ClaudeUsageResult {
-    case ok(fiveHour: LimitWindow, weekly: LimitWindow, plan: String?)
+    case ok(windows: [LimitWindow], plan: String?)
     case loggedOut
     case error(String)
 }
@@ -172,7 +172,10 @@ final class ClaudeWebSession: NSObject, WKNavigationDelegate, WKUIDelegate, NSWi
             const u = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials:'include', headers:H, cache:'no-store'});
             if (u.ok) {
               const j = await u.json();
-              if (j && j.five_hour) {
+              if (j && (j.five_hour || j.seven_day ||
+                  (Array.isArray(j.limits) && j.limits.some(l =>
+                    l && ['session', 'weekly_all', 'weekly_scoped'].includes(l.kind) &&
+                    typeof l.percent === 'number')))) {
                 return JSON.stringify({state:'ok', usage:j, plan: detectPlan(org)});
               }
             }
@@ -196,9 +199,9 @@ final class ClaudeWebSession: NSObject, WKNavigationDelegate, WKUIDelegate, NSWi
                 case "ok":
                     self.lastChallengeReload = nil
                     if let usage = obj["usage"] as? [String: Any],
-                       let windows = ClaudeWebSession.parse(usage) {
+                       let windows = ClaudeUsageParser.parse(usage) {
                         let plan = obj["plan"] as? String
-                        finish(.ok(fiveHour: windows.0, weekly: windows.1, plan: plan))
+                        finish(.ok(windows: windows, plan: plan))
                     } else {
                         finish(.error("usage parse"))
                     }
@@ -215,21 +218,6 @@ final class ClaudeWebSession: NSObject, WKNavigationDelegate, WKUIDelegate, NSWi
                 }
             }
         }
-    }
-
-    private static func parse(_ usage: [String: Any]) -> (LimitWindow, LimitWindow)? {
-        func window(_ key: String, _ kind: WindowKind) -> LimitWindow? {
-            guard let w = usage[key] as? [String: Any],
-                  let util = (w["utilization"] as? NSNumber)?.doubleValue else { return nil }
-            var reset: Date?
-            if let s = w["resets_at"] as? String {
-                reset = Fmt.claudeUsageResetDate(s)
-            }
-            return LimitWindow(kind: kind, usedPercent: util, resetsAt: reset, isReal: true)
-        }
-        guard let five = window("five_hour", .fiveHour),
-              let week = window("seven_day", .weekly) else { return nil }
-        return (five, week)
     }
 
     // MARK: - WKNavigationDelegate

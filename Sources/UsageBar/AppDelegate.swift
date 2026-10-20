@@ -211,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Claude · Codex 사용량을 메뉴 막대에 표시합니다.
         두 도구 모두 계정의 실제 한도를 실시간으로 보여줍니다.
 
-        버전 2.6
+        버전 2.7
         """
         alert.addButton(withTitle: "확인")
         alert.runModal()

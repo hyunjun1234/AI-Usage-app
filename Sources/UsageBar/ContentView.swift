@@ -127,7 +127,7 @@ struct ContentView: View {
     }
 }
 
-/// One tool card: name + badge + two limit windows (5시간 / 주간).
+/// One tool card with shared limits and any model-specific weekly limits.
 struct ToolCard: View {
     let tool: Tool
     let accent: Color
@@ -161,7 +161,10 @@ struct ToolCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                ForEach(windows) { WindowRow(window: $0, accent: accent) }
+                ForEach(windows) {
+                    WindowRow(window: $0, accent: accent,
+                              labelWidth: windows.contains { $0.modelName != nil } ? 82 : 42)
+                }
                 if let note = note {
                     Text(note)
                         .font(.caption2).foregroundStyle(.secondary)
@@ -188,13 +191,15 @@ struct ToolCard: View {
 struct WindowRow: View {
     let window: LimitWindow
     let accent: Color
+    var labelWidth: CGFloat = 42
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                Text(window.kind.label)
+                Text(window.label)
                     .font(.caption).foregroundStyle(.secondary)
-                    .frame(width: 42, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: labelWidth, alignment: .leading)
                 GaugeBar(fraction: window.usedPercent / 100, accent: accent)
                 Text("\(Int(window.usedPercent.rounded()))%")
                     .font(.callout.weight(.semibold)).monospacedDigit()
@@ -204,7 +209,7 @@ struct WindowRow: View {
             if let reset = window.resetText {
                 Text(reset)
                     .font(.caption2).foregroundStyle(.tertiary)
-                    .padding(.leading, 50)
+                    .padding(.leading, labelWidth + 8)
             }
         }
     }

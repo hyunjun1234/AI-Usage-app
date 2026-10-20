@@ -47,7 +47,7 @@ struct Snapshot {
     }
     /// Used percent for one tool's chosen window.
     func percent(_ tool: Tool, _ kind: WindowKind) -> Double? {
-        windows(for: tool).first { $0.kind == kind }?.usedPercent
+        windows(for: tool).first { $0.kind == kind && $0.modelName == nil }?.usedPercent
     }
 }
 
@@ -76,7 +76,7 @@ final class UsageStore: ObservableObject {
     private let codexQueue = DispatchQueue(label: "aiusage.codex")
 
     private let claudeWeb = ClaudeWebSession()
-    private var claudeReal: (fiveHour: LimitWindow, weekly: LimitWindow)?
+    private var claudeReal: [LimitWindow] = []
     private var claudePlan: String?
     private var claudeLoggedOut = false
     private var didAutoPromptLogin = false
@@ -92,12 +92,12 @@ final class UsageStore: ObservableObject {
         claudeWeb.onResult = { [weak self] result in
             guard let self = self else { return }
             switch result {
-            case .ok(let five, let week, let plan):
-                self.claudeReal = (five, week)
+            case .ok(let windows, let plan):
+                self.claudeReal = windows
                 self.claudePlan = plan       // null wipes a stale label
                 self.claudeLoggedOut = false
             case .loggedOut:
-                self.claudeReal = nil
+                self.claudeReal = []
                 self.claudePlan = nil
                 self.claudeLoggedOut = true
                 if !self.didAutoPromptLogin {
@@ -157,7 +157,7 @@ final class UsageStore: ObservableObject {
 
     private func recompute() {
         lastUpdated = Date()
-        let cWindows = claudeReal.map { [$0.fiveHour, $0.weekly] } ?? []
+        let cWindows = claudeReal
         let xWindows = [codexLimits?.fiveHour, codexLimits?.weekly].compactMap { $0 }
         let maxPct = (cWindows + xWindows).map { $0.usedPercent }.max()
         snapshot = Snapshot(

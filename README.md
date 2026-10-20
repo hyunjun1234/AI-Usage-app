@@ -14,7 +14,9 @@ CLI에서는 토큰 사용량·한도를 한눈에 보기 어렵습니다. AI Us
 - **메뉴 막대** — `C`(Claude) / `X`(Codex) 사용률을 세로 두 줄로 표시.
   80% 이상 주황, 100% 이상 빨강.
 - **팝오버**(좌클릭) — 도구별 카드에 **5시간**·**주간** 한도를 막대·%·리셋
-  시각과 함께 표시.
+  시각과 함께 표시. Claude API가 모델별 한도를 제공하면 **Fable 주간** 등도
+  같은 카드에 표시합니다. 해당 한도가 없는 계정에서는 표시하지 않습니다.
+  메뉴 막대의 주간 사용률은 기존처럼 전체 모델 기준입니다.
 
 ## 실시간 한도 — 두 도구 모두
 
@@ -59,9 +61,19 @@ CLI에서는 토큰 사용량·한도를 한눈에 보기 어렵습니다. AI Us
 전체 Xcode 없이 Swift 툴체인(Command Line Tools)만으로 빌드됩니다.
 
 ```sh
-cd "Usage App"
+cd "AI-Usage-app"
 ./build-app.sh --install          # 빌드 후 /Applications 에 설치
 open "/Applications/AI Usage.app"
+```
+
+기존 앱이 실행 중이면 종료한 뒤 새로 설치한 앱을 실행하세요.
+`./build-app.sh`만 실행하면 프로젝트 폴더에 앱이 만들어지며,
+`/Applications`의 기존 앱은 교체되지 않습니다.
+
+사용량 응답 파싱 회귀 테스트도 Command Line Tools만으로 실행할 수 있습니다.
+
+```sh
+./test.sh
 ```
 
 ## 배포 (.dmg 만들기)

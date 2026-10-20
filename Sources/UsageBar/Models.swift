@@ -11,14 +11,20 @@ enum WindowKind: String {
     var label: String { self == .fiveHour ? "5시간" : "주간" }
 }
 
-/// A usage window for display — real (Codex) or estimated (Claude).
+/// An account-wide or model-specific usage window reported by the service.
 struct LimitWindow: Identifiable {
     let kind: WindowKind
     var usedPercent: Double      // 0...100+
     var resetsAt: Date?
     var isReal: Bool
+    var modelName: String? = nil
 
-    var id: String { kind.label }
+    var id: String {
+        modelName.map { "\(kind.rawValue):\($0.lowercased())" } ?? kind.rawValue
+    }
+    var label: String {
+        modelName.map { "\($0) \(kind.label)" } ?? kind.label
+    }
 
     /// Human reset hint, e.g. "오후 3:41 초기화" or "5/25 초기화".
     var resetText: String? {

@@ -4,11 +4,9 @@
 DerivedData/
 *.xcuserstate
 xcuserdata/
+*.app/
 
 # Local AI assistant workspace/config files
 .codex/
 .claude/
 AGENTS.md
-
-# Local packaging helper
-make-dmg.sh
