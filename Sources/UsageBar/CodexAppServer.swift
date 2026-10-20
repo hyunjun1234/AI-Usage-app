@@ -165,7 +165,7 @@ final class CodexAppServer {
             disconnect(error: CodexServiceError(message: "Codex를 실행하지 못했습니다.", requiresLogin: false))
             return
         }
-        request("initialize", params: ["clientInfo": ["name": "aiusage", "title": "AI Usage", "version": "2.8"]]) { [weak self] response in
+        request("initialize", params: ["clientInfo": ["name": "aiusage", "title": "AI Usage", "version": "2.9"]]) { [weak self] response in
             guard let self = self else { return }
             switch response {
             case .success:

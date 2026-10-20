@@ -126,13 +126,7 @@ struct ContentView: View {
                         badgeReal: hasData && snap.codexOK,
                         subtitle: snap.codexPlan.map { $0.capitalized } ?? "",
                         windows: snap.codexWindows,
-                        note: note,
-                        loginAction: { store.showCodexLogin() },
-                        loginTitle: store.codexLoginInProgress
-                            ? "브라우저에서 로그인 중…" : "ChatGPT 계정으로 로그인",
-                        loginDisabled: store.codexLoginInProgress,
-                        cancelLoginAction: store.codexLoginInProgress
-                            ? { store.cancelCodexLogin() } : nil)
+                        note: note)
     }
 }
 
@@ -146,9 +140,6 @@ struct ToolCard: View {
     let windows: [LimitWindow]
     let note: String?
     var loginAction: (() -> Void)? = nil
-    var loginTitle = "Claude.ai 로그인 → 실시간 사용량"
-    var loginDisabled = false
-    var cancelLoginAction: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -185,7 +176,7 @@ struct ToolCard: View {
             }
             if let loginAction = loginAction {
                 Button(action: loginAction) {
-                    Text(loginTitle)
+                    Text("Claude.ai 로그인 → 실시간 사용량")
                         .font(.caption.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
@@ -193,17 +184,7 @@ struct ToolCard: View {
                         .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(.plain)
-                .disabled(loginDisabled)
-                .opacity(loginDisabled ? 0.5 : 1)
-                .help(tool == .codex
-                      ? "Codex 앱·CLI와 로그인 상태를 공유합니다."
-                      : "claude.ai 계정으로 로그인합니다.")
-            }
-            if let cancelLoginAction {
-                Button("로그인 취소", action: cancelLoginAction)
-                    .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                .help("claude.ai 계정으로 로그인합니다.")
             }
         }
         .padding(11)

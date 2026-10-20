@@ -12,6 +12,11 @@ struct ClaudeUsageParserTests {
             ("malformed entries", testMalformedEntriesDoNotHideValidUsage),
             ("model identities", testMultipleModelsHaveDistinctIDsAndDuplicateRowsAreIgnored),
             ("menu bar weekly selection", testMenuBarWeeklyPercentDoesNotUseModelSpecificLimit),
+            ("menu bar weekly-only Codex fallback", testMenuBarFallsBackToWeeklyCodex),
+            ("menu bar five-hour-only fallback", testMenuBarFallsBackToFiveHour),
+            ("menu bar prefers the selected available window", testMenuBarPrefersSelectedWindow),
+            ("menu bar excludes scoped fallback windows", testMenuBarFallbackExcludesModelSpecificLimits),
+            ("menu bar distinguishes missing data and zero", testMenuBarMissingDataAndZero),
             ("invalid response", testInvalidResponseDoesNotMasqueradeAsZeroUsage),
             ("fractional usage and overage", testFractionalPercentAndOverageAreNotRescaledOrClamped)
         ]
@@ -141,6 +146,80 @@ struct ClaudeUsageParserTests {
         precondition(snapshot.percent(.claude, .weekly) == 20)
         snapshot.claudeWindows.removeAll { $0.modelName == nil }
         precondition(snapshot.percent(.claude, .weekly) == nil)
+    }
+
+    static func testMenuBarFallsBackToWeeklyCodex() {
+        let reset = Date(timeIntervalSince1970: 1_800_600_000)
+        let snapshot = Snapshot(
+            claudeWindows: [LimitWindow(kind: .fiveHour, usedPercent: 8, resetsAt: nil, isReal: true)],
+            codexWindows: [LimitWindow(kind: .weekly, usedPercent: 65.75, resetsAt: reset, isReal: true)])
+        let displayed = snapshot.menuWindow(for: .codex, preferred: .fiveHour)
+        precondition(displayed?.kind == .weekly)
+        precondition(displayed?.usedPercent == 65.75)
+        precondition(displayed?.resetsAt == reset)
+        precondition(snapshot.percent(.codex, .fiveHour) == nil)
+        precondition(snapshot.percent(.codex, .weekly) == 65.75)
+        precondition(snapshot.menuWindow(for: .claude, preferred: .fiveHour)?.usedPercent == 8)
+    }
+
+    static func testMenuBarFallsBackToFiveHour() {
+        let snapshot = Snapshot(codexWindows: [
+            LimitWindow(kind: .fiveHour, usedPercent: 12.5, resetsAt: nil, isReal: true)
+        ])
+        let displayed = snapshot.menuWindow(for: .codex, preferred: .weekly)
+        precondition(displayed?.kind == .fiveHour)
+        precondition(displayed?.usedPercent == 12.5)
+        precondition(snapshot.percent(.codex, .weekly) == nil)
+    }
+
+    static func testMenuBarPrefersSelectedWindow() {
+        let snapshot = Snapshot(codexWindows: [
+            LimitWindow(kind: .weekly, usedPercent: 65.75, resetsAt: nil, isReal: true),
+            LimitWindow(kind: .fiveHour, usedPercent: 12.5, resetsAt: nil, isReal: true)
+        ])
+        let fiveHour = snapshot.menuWindow(for: .codex, preferred: .fiveHour)
+        let weekly = snapshot.menuWindow(for: .codex, preferred: .weekly)
+        precondition(fiveHour?.kind == .fiveHour && fiveHour?.usedPercent == 12.5)
+        precondition(weekly?.kind == .weekly && weekly?.usedPercent == 65.75)
+    }
+
+    static func testMenuBarFallbackExcludesModelSpecificLimits() {
+        let scopedFiveHour = LimitWindow(
+            kind: .fiveHour, usedPercent: 90, resetsAt: nil, isReal: true, modelName: "Fable")
+        let scopedWeekly = LimitWindow(
+            kind: .weekly, usedPercent: 95, resetsAt: nil, isReal: true, modelName: "Fable")
+        let sharedWeekly = LimitWindow(kind: .weekly, usedPercent: 25, resetsAt: nil, isReal: true)
+        let mixed = [scopedFiveHour, scopedWeekly, sharedWeekly]
+        let sharedSnapshot = Snapshot(claudeWindows: mixed, codexWindows: mixed)
+        let scopedSnapshot = Snapshot(
+            claudeWindows: [scopedFiveHour, scopedWeekly],
+            codexWindows: [scopedFiveHour, scopedWeekly])
+        for tool in Tool.allCases {
+            let fallback = sharedSnapshot.menuWindow(for: tool, preferred: .fiveHour)
+            precondition(fallback?.kind == .weekly && fallback?.usedPercent == 25)
+            precondition(fallback?.modelName == nil)
+            precondition(sharedSnapshot.menuWindow(for: tool, preferred: .weekly)?.usedPercent == 25)
+            precondition(scopedSnapshot.menuWindow(for: tool, preferred: .fiveHour) == nil)
+            precondition(scopedSnapshot.menuWindow(for: tool, preferred: .weekly) == nil)
+        }
+    }
+
+    static func testMenuBarMissingDataAndZero() {
+        let empty = Snapshot()
+        for tool in Tool.allCases {
+            precondition(empty.menuWindow(for: tool, preferred: .fiveHour) == nil)
+            precondition(empty.menuWindow(for: tool, preferred: .weekly) == nil)
+        }
+        let zeroWeekly = LimitWindow(kind: .weekly, usedPercent: 0, resetsAt: nil, isReal: true)
+        let onlyWeekly = Snapshot(codexWindows: [zeroWeekly])
+        precondition(onlyWeekly.menuWindow(for: .codex, preferred: .fiveHour)?.usedPercent == 0)
+        precondition(onlyWeekly.menuWindow(for: .codex, preferred: .weekly)?.usedPercent == 0)
+        let both = Snapshot(codexWindows: [
+            zeroWeekly,
+            LimitWindow(kind: .fiveHour, usedPercent: 30, resetsAt: nil, isReal: true)
+        ])
+        precondition(both.menuWindow(for: .codex, preferred: .weekly)?.usedPercent == 0)
+        precondition(both.percent(.codex, .weekly) == 0)
     }
 
     static func testInvalidResponseDoesNotMasqueradeAsZeroUsage() {

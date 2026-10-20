@@ -51,6 +51,13 @@ struct Snapshot {
     func percent(_ tool: Tool, _ kind: WindowKind) -> Double? {
         windows(for: tool).first { $0.kind == kind && $0.modelName == nil }?.usedPercent
     }
+
+    /// Prefer the selected period, falling back to an available account-wide limit.
+    /// Some Codex plans provide only a weekly limit; model-specific limits are separate.
+    func menuWindow(for tool: Tool, preferred kind: WindowKind) -> LimitWindow? {
+        let shared = windows(for: tool).filter { $0.modelName == nil }
+        return shared.first { $0.kind == kind } ?? shared.first
+    }
 }
 
 /// Owns the data sources, drives refreshes, and publishes a derived Snapshot.

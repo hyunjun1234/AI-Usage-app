@@ -221,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Claude · Codex 사용량을 메뉴 막대에 표시합니다.
         두 도구 모두 계정의 실제 한도를 실시간으로 보여줍니다.
 
-        버전 2.8
+        버전 2.9
         """
         alert.addButton(withTitle: "확인")
         alert.runModal()
@@ -233,14 +233,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let snap = store.snapshot
         let kind = store.menuWindow
         var lines: [MenuBarLabel.Line] = []
-        if store.toolFilter.showsClaude {
-            lines.append(menuLine("C", snap.percent(.claude, kind)))
-        }
-        if store.toolFilter.showsCodex {
-            lines.append(menuLine("X", snap.percent(.codex, kind)))
+        var details: [String] = []
+        for tool in Tool.allCases {
+            guard tool == .claude ? store.toolFilter.showsClaude : store.toolFilter.showsCodex else {
+                continue
+            }
+            let window = snap.menuWindow(for: tool, preferred: kind)
+            lines.append(menuLine(tool == .claude ? "C" : "X", window?.usedPercent))
+            if let window {
+                details.append("\(tool.label) \(window.label): \(Int(window.usedPercent.rounded()))%")
+            } else {
+                details.append("\(tool.label): 사용량 없음")
+            }
         }
         menuLabel.lines = lines
         statusItem.length = menuLabel.contentWidth
+        statusItem.button?.toolTip = details.joined(separator: "\n")
+        statusItem.button?.setAccessibilityLabel(details.joined(separator: ", "))
     }
 
     private func menuLine(_ tag: String, _ percent: Double?) -> MenuBarLabel.Line {
